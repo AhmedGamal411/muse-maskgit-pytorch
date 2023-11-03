@@ -37,6 +37,7 @@ setup(
         "torch>=2.0",
         "torchmetrics<0.8.0",
         "pytorch-lightning>=2.0.0",
+        "taming-transformers @ git+https://github.com/neggles/taming-transformers.git@v0.0.2",
         "transformers",
         "torchvision",
         "torch_optimizer",

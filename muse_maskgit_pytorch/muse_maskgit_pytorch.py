@@ -479,8 +479,10 @@ class MaskGit(nn.Module):
     @eval_decorator
     def generate(
         self,
-        texts: List[str],
+        texts: Optional[List[str]] = None,
+        text_embeds: Optional[torch.Tensor] = None,
         negative_texts: Optional[List[str]] = None,
+        neg_text_embeds: Optional[torch.Tensor] = None,
         cond_images: Optional[torch.Tensor] = None,
         fmap_size=None,
         temperature=1.0,
@@ -490,6 +492,7 @@ class MaskGit(nn.Module):
         timesteps=18,  # ideal number of steps is 18 in maskgit paper
         cond_scale=3,
         critic_noise_scale=1,
+        batch_size = 1
     ):
         fmap_size = default(fmap_size, self.vae.get_encoded_fmap_size(self.image_size))
 
@@ -498,8 +501,6 @@ class MaskGit(nn.Module):
         device = next(self.parameters()).device
 
         seq_len = fmap_size**2
-
-        batch_size = len(texts)
 
         shape = (batch_size, seq_len)
 
@@ -510,7 +511,15 @@ class MaskGit(nn.Module):
 
         cond_ids = None
 
-        text_embeds = self.transformer.encode_text(texts)
+        if texts is not None and text_embeds is not None:
+            raise ValueError("only one of texts or text_embeds should be passed in")
+
+        if texts is not None:
+            text_embeds = self.transformer.encode_text(texts)
+            batch_size = len(texts)
+        else:
+            batch_size = len(text_embeds)
+        
 
         demask_fn = self.transformer.forward_with_cond_scale
 
@@ -523,8 +532,11 @@ class MaskGit(nn.Module):
 
         # negative prompting, as in paper
 
-        neg_text_embeds = None
-        if exists(negative_texts):
+        if negative_texts is not None and neg_text_embeds is not None:
+            raise ValueError("only one of negative_texts or neg_text_embeds should be passed in")
+
+        #neg_text_embeds = None
+        if (exists(negative_texts) and neg_text_embeds is None):
             assert len(texts) == len(negative_texts)
 
             neg_text_embeds = self.transformer.encode_text(negative_texts)
@@ -774,7 +786,9 @@ class Muse(nn.Module):
     @torch.no_grad()
     def forward(
         self,
-        texts: List[str],
+        texts: Optional[List[str]] = None,
+        text_embeds: Optional[torch.Tensor] = None,
+        image_guide: Optional[torch.Tensor] = None,
         cond_scale=3.0,
         temperature=1.0,
         timesteps=18,
@@ -784,13 +798,16 @@ class Muse(nn.Module):
     ):
         lowres_image = self.base_maskgit.generate(
             texts=texts,
+            text_embeds = text_embeds,
             cond_scale=cond_scale,
             temperature=temperature,
             timesteps=timesteps,
+            cond_images=image_guide,
         )
 
         superres_image = self.superres_maskgit.generate(
             texts=texts,
+            text_embeds = text_embeds,
             cond_scale=cond_scale,
             cond_images=lowres_image,
             temperature=temperature,
